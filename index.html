@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>DEWA 多账单二维码生成（清晰排版）</title>
+  <title>DEWA Multi-Bill QR Generator</title>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
   <style>
@@ -16,8 +16,14 @@
 </head>
 <body>
 
+  <!-- Logo + Header -->
+  <div style="text-align:center; padding: 20px; background: #ffffff; border-radius: 12px; margin-bottom: 30px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+    <img src="https://bobby520.github.io/dewa-qrcode/company-logo.png" alt="Company Logo" style="height: 60px; margin-bottom: 10px;"><br>
+    <h2 style="margin: 0;">DEWA Invoice QR Code Generator</h2>
+    <p style="font-size: 14px; color: #666; margin-top: 5px;">Supports multi-bill upload / auto extraction / scan-ready output</p>
+  </div>
+
   <div style="margin-bottom: 20px;">
-    <h2>上传多个 DEWA 发票 ➜ 自动识别费用 ➜ 清晰生成二维码</h2>
     <input type="file" id="pdfInput" accept=".pdf" multiple>
   </div>
 
@@ -63,7 +69,7 @@
         const eleAmt = getVal(/Electricity\s+AED\s+([\d.]+)/);
         if (eleAmt) {
           dataList.push({
-            title: "电费",
+            title: "Electricity",
             qr: `CLS:DEWA|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${eleAmt}|QTY:125|PRI:0.230|DT:${dt}|NOTE:ELECTRICITY`
           });
         }
@@ -71,7 +77,7 @@
         const watAmt = getVal(/Water\s+AED\s+([\d.]+)/);
         if (watAmt) {
           dataList.push({
-            title: "水费",
+            title: "Water",
             qr: `CLS:DEWA|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${watAmt}|QTY:6.025|PRI:7.700|DT:${dt}|NOTE:WATER`
           });
         }
@@ -79,7 +85,7 @@
         const housingAmt = getVal(/Housing\s+AED\s+([\d.]+)/);
         if (housingAmt) {
           dataList.push({
-            title: "住房费",
+            title: "Housing Fee",
             qr: `CLS:DEWA|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${housingAmt}|QTY:1|PRI:${housingAmt}|DT:${dt}|NOTE:HOUSING`
           });
         }
@@ -87,7 +93,7 @@
         const coolingAmt = getVal(/District Cooling\s+AED\s+([\d.]+)/);
         if (coolingAmt && empowerInvoice) {
           dataList.push({
-            title: "制冷费",
+            title: "District Cooling",
             qr: `CLS:Empower|TIT:EM${empowerInvoice}|SD:${sd}|ED:${ed}|AMT:${coolingAmt}|QTY:1|PRI:${coolingAmt}|DT:${dt}|NOTE:COOLING`
           });
         }
@@ -101,10 +107,10 @@
 
         const groupDiv = document.createElement("div");
         groupDiv.className = "invoice-group";
-        groupDiv.innerHTML = `<div class="invoice-title">发票编号：${invoice} (${file.name})</div>`;
+        groupDiv.innerHTML = `<div class="invoice-title">Invoice: ${invoice} (${file.name})</div>`;
 
         if (dataList.length === 0) {
-          groupDiv.innerHTML += `<p⚠️ 未识别到任何费用项。</p>`;
+          groupDiv.innerHTML += `<p>⚠️ No charge items detected.</p>`;
         }
 
         dataList.forEach((item, index) => {
