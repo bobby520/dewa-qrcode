@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DEWA 多账单二维码生成（清晰排版）</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
+  <style>
+    body { font-family: Arial; background: #f5f5f5; padding: 20px; max-width: 1000px; margin: auto; }
+    .invoice-group { background: #fff; padding: 20px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 0 8px rgba(0,0,0,0.1); }
+    .invoice-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+    .qr-card { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 8px; background: #fafafa; }
+    .qr-block { width: 180px; height: 180px; }
+    .summary { font-size: 14px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+
+  <div style="margin-bottom: 20px;">
+    <h2>上传多个 DEWA 发票 ➜ 自动识别费用 ➜ 清晰生成二维码</h2>
+    <input type="file" id="pdfInput" accept=".pdf" multiple>
+  </div>
+
+  <div id="output"></div>
+
+  <script>
+    document.getElementById('pdfInput').addEventListener('change', async function (e) {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+
+      const output = document.getElementById("output");
+      output.innerHTML = "";
+
+      const readPdfText = async (file) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument(new Uint8Array(arrayBuffer)).promise;
+
+        let text = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          text += content.items.map(item => item.str).join("\n") + "\n";
+        }
+        return text;
+      };
+
+      const extractFields = (text) => {
+        const getVal = (regex) => {
+          const match = text.match(regex);
+          return match ? match[1].trim() : "";
+        };
+
+        const invoice = getVal(/Invoice:\s*(\d+)/);
+        const empowerInvoice = getVal(/EM(\d{9,})/);
+        const issueDate = getVal(/Issue Date:\s*(\d{2}\/\d{2}\/\d{4})/).replace(/\//g, "-");
+        const period = text.match(/Period:\s*(\d{2}\/\d{2}\/\d{4})\s*to\s*(\d{2}\/\d{2}\/\d{4})/);
+        const sd = period ? period[1].replace(/\//g, "") : "";
+        const ed = period ? period[2].replace(/\//g, "") : "";
+        const dt = issueDate.replace(/-/g, "");
+
+        const dataList = [];
+
+        const eleAmt = getVal(/Electricity\s+AED\s+([\d.]+)/);
+        if (eleAmt) {
+          dataList.push({
+            title: "电费",
+            qr: `CLS:DEWA|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${eleAmt}|QTY:125|PRI:0.230|DT:${dt}|NOTE:ELECTRICITY`
+          });
+        }
+
+        const watAmt = getVal(/Water\s+AED\s+([\d.]+)/);
+        if (watAmt) {
+          dataList.push({
+            title: "水费",
+            qr: `CLS:DEWA|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${watAmt}|QTY:6.025|PRI:7.700|DT:${dt}|NOTE:WATER`
+          });
+        }
+
+        const housingAmt = getVal(/Housing\s+AED\s+([\d.]+)/);
+        if (housingAmt) {
+          dataList.push({
+            title: "住房费",
+            qr: `CLS:DEWA|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${housingAmt}|QTY:1|PRI:${housingAmt}|DT:${dt}|NOTE:HOUSING`
+          });
+        }
+
+        const coolingAmt = getVal(/District Cooling\s+AED\s+([\d.]+)/);
+        if (coolingAmt && empowerInvoice) {
+          dataList.push({
+            title: "制冷费",
+            qr: `CLS:Empower|TIT:EM${empowerInvoice}|SD:${sd}|ED:${ed}|AMT:${coolingAmt}|QTY:1|PRI:${coolingAmt}|DT:${dt}|NOTE:COOLING`
+          });
+        }
+
+        return { invoice, dataList };
+      };
+
+      for (const file of files) {
+        const text = await readPdfText(file);
+        const { invoice, dataList } = extractFields(text);
+
+        const groupDiv = document.createElement("div");
+        groupDiv.className = "invoice-group";
+        groupDiv.innerHTML = `<div class="invoice-title">发票编号：${invoice} (${file.name})</div>`;
+
+        if (dataList.length === 0) {
+          groupDiv.innerHTML += `<p⚠️ 未识别到任何费用项。</p>`;
+        }
+
+        dataList.forEach((item, index) => {
+          const card = document.createElement("div");
+          card.className = "qr-card";
+
+          const qrBox = document.createElement("div");
+          qrBox.id = `qr_${invoice}_${index}`;
+          qrBox.className = "qr-block";
+
+          const textBox = document.createElement("div");
+          textBox.className = "summary";
+          textBox.innerHTML = `<b>${item.title}</b><br>${item.qr.replace(/\|/g, "<br>")}`;
+
+          card.appendChild(qrBox);
+          card.appendChild(textBox);
+          groupDiv.appendChild(card);
+
+          setTimeout(() => {
+            new QRCode(qrBox, {
+              text: item.qr,
+              width: 180,
+              height: 180
+            });
+          }, 10);
+        });
+
+        output.appendChild(groupDiv);
+      }
+    });
+  </script>
+</body>
+</html>
