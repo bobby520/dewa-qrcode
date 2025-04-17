@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>DEWA + Empower QR Generator</title>
+  <title>DEWA + Empower + Etisalat QR Generator (Debug)</title>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
   <style>
@@ -20,13 +20,14 @@
 
 <div class="header">
   <img class="company-logo" src="https://bobby520.github.io/dewa-qrcode/company-logo.png" alt="Company Logo"><br>
-  <h2>DEWA / Empower Invoice QR Code Generator (v4)</h2>
+  <h2>DEWA / Empower / Etisalat Invoice QR Code Generator</h2>
   <p>Upload PDF to auto generate structured QR</p>
 </div>
 
 <input type="file" id="pdfInput" accept=".pdf" multiple />
 <div id="output"></div>
 
+<!-- 保留完整结构，加入 DEWA + Empower + Etisalat 融合识别逻辑 -->
 <script>
 document.getElementById('pdfInput').addEventListener('change', async function (e) {
   const files = Array.from(e.target.files);
@@ -35,43 +36,34 @@ document.getElementById('pdfInput').addEventListener('change', async function (e
 
   const readPdfText = async (file) => {
     const buffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument(new Uint8Array(buffer)).promise;
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
     let text = "";
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
+      text += `\n==== PAGE ${i} START ====\n`;
       text += content.items.map(item => item.str).join("\n") + "\n";
+      text += `==== PAGE ${i} END ====\n`;
     }
     return text;
   };
 
   const extractFields = (text) => {
+    console.log("==== Extracted PDF Text ====");
+    console.log(text);
+
     const getVal = (regex) => {
-      const m = text.match(regex);
-      return m ? m[1].trim() : "";
+      const match = text.match(regex);
+      return match ? match[1].trim() : "";
     };
 
     const formatDateToYMD = (d) => {
-      const parts = d.split("/");
-      return parts.length === 3 ? parts[2] + parts[1] + parts[0] : "";
+      const date = new Date(d);
+      if (isNaN(date)) return "";
+      return date.getFullYear().toString() + ("0" + (date.getMonth() + 1)).slice(-2) + ("0" + date.getDate()).slice(-2);
     };
 
-    const invoice = getVal(/Invoice:\s*(\d+)/);
-    const accountMatch = text.match(/\b(205|204|201)\d{7}\b/);
-    const account = accountMatch ? accountMatch[0].trim() : "";
-
-    const issueDateRaw = getVal(/Issue Date:\s*(\d{2}\/\d{2}\/\d{4})/);
-    const today = new Date();
-    const todayStr = today.getFullYear().toString() +
-                    String(today.getMonth() + 1).padStart(2, '0') +
-                    String(today.getDate()).padStart(2, '0');
-    const dt = formatDateToYMD(issueDateRaw) || todayStr;
-
-    const period = text.match(/Period:\s*(\d{2}\/\d{2}\/\d{4})\s*to\s*(\d{2}\/\d{2}\/\d{4})/);
-    const sd = period ? formatDateToYMD(period[1]) : "";
-    const ed = period ? formatDateToYMD(period[2]) : "";
-
-    const empowerInvoice = getVal(/EM(\d{9,})/);
+    const result = [];
 
     const roomMap = {
       "2052303049": "Bldg 81 - 05",
@@ -79,7 +71,6 @@ document.getElementById('pdfInput').addEventListener('change', async function (e
       "2052303065": "Bldg 81 - 08",
       "2052303022": "Bldg 81 - 17",
       "2052303020": "Bldg 81 - 20",
-      "2052303030": "Bldg 81 - 20",
       "2045749355": "Bldg 82 - 06",
       "2045749401": "Bldg 82 - 18",
       "2045749320": "Bldg 83 - 03",
@@ -93,54 +84,78 @@ document.getElementById('pdfInput').addEventListener('change', async function (e
       "2017261645": "OFFICE-1901"
     };
 
-    const room = roomMap[account] || "UNKNOWN";
+    const phoneRoomMap = {
+      "043808162": "Bldg 81 - 07",
+      "043861077": "Bldg 81 - 08",
+      "045913147": "Bldg 81 - 17",
+      "043237002": "Bldg 82 - 06",
+      "043274474": "Bldg 82 - 18",
+      "043278282": "Bldg 83 - 03",
+      "042982888": "Bldg 83 - 10",
+      "042838338": "Bldg 83 - 12",
+      "043264848": "Bldg 85 - 06",
+      "048820966": "Bldg 93 - 05",
+      "043385947": "Bldg 106 - 18"
+    };
 
-    const result = [];
+    const lines = text.split(/\n/).map(l => l.trim());
+    let inetAmt = "";
+    for (let i = 0; i < lines.length - 1; i++) {
+      if (/^\d+[.]?$/.test(lines[i]) && /^\d{1,2}$/.test(lines[i + 1])) {
+        inetAmt = lines[i].replace(/\.$/, '') + '.' + lines[i + 1];
+        break;
+      }
+    }
+
+    const inetInvoice = getVal(/Bill number\s+([A-Z0-9]+)/i);
+    const inetIssue = getVal(/Bill issue date\s+(\d{2}\s+\w+\s+\d{4})/i);
+    const inetPeriod = text.match(/Bill period\s+(\d{2}\s+\w+\s+\d{4})\s+[–-]\s+(\d{2}\s+\w+\s+\d{4})/i);
+    const inetStart = inetPeriod ? inetPeriod[1] : "";
+    const inetEnd = inetPeriod ? inetPeriod[2] : "";
+    const etisalatNumber = getVal(/Landline number\s+(\d{9})/);
+    const inetRoom = phoneRoomMap[etisalatNumber] || "UNKNOWN";
+    if (inetInvoice && inetAmt && inetStart && inetEnd) {
+      result.push({
+        title: "Internet Bill",
+        qr: `CLS:INTERNET|TIT:${inetInvoice}|SD:${formatDateToYMD(inetStart)}|ED:${formatDateToYMD(inetEnd)}|AMT:${inetAmt}|PRI:0.00|DT:${formatDateToYMD(inetIssue)}|NOTE:eLife|ROOM:${inetRoom}`
+      });
+    }
+
+    const invoice = getVal(/Invoice:\s*(\d+)/);
+    const accountMatch = text.match(/\b(205|204|201)\d{7}\b/);
+    const account = accountMatch ? accountMatch[0].trim() : "";
+    const room = roomMap[account] || "UNKNOWN";
+    const issueDateRaw = getVal(/Issue Date:\s*(\d{2}\/\d{2}\/\d{4})/);
+    const today = new Date();
+    const todayStr = today.getFullYear().toString() + ("0" + (today.getMonth() + 1)).slice(-2) + ("0" + today.getDate()).slice(-2);
+    const dt = issueDateRaw ? formatDateToYMD(issueDateRaw) : todayStr;
+    const period = text.match(/Period:\s*(\d{2}\/\d{2}\/\d{4})\s*to\s*(\d{2}\/\d{2}\/\d{4})/);
+    const sd = period ? formatDateToYMD(period[1]) : "";
+    const ed = period ? formatDateToYMD(period[2]) : "";
+    const empowerInvoice = getVal(/EM(\d{9,})/);
 
     const eleQty = text.match(/Electricity\s+(\d+)\s*Kilowatt/i)?.[1] || "125";
-    const eleAmt = getVal(/Electricity\s+AED\s+([\d.]+)/);
+    const eleAmt = getVal(/Electricity\s+AED\s+([\d,.]+)/).replace(/,/g, "");
     const elePri = eleAmt && eleQty ? (parseFloat(eleAmt) / parseFloat(eleQty)).toFixed(3) : "0.230";
 
     const watQty = text.match(/Water\s+([\d.]+)\s*Cubic/i)?.[1] || "6.025";
-    const watAmt = getVal(/Water\s+AED\s+([\d.]+)/);
+    const watAmt = getVal(/Water\s+AED\s+([\d,.]+)/).replace(/,/g, "");
     const watPri = watAmt && watQty ? (parseFloat(watAmt) / parseFloat(watQty)).toFixed(3) : "7.700";
 
-    const coolingAmt = getVal(/District Cooling\s+AED\s+([\d.]+)/);
+    const coolingAmt = getVal(/District Cooling\s+AED\s+([\d,.]+)/).replace(/,/g, "");
     const coolingMatch = text.match(/Consumption:\s*([\d.]+)\s*Ton.*?Rate:\s*([\d.]+)/i);
     const coolingQty = coolingMatch?.[1] || "1";
     const coolingPri = coolingAmt && coolingQty ? (parseFloat(coolingAmt) / parseFloat(coolingQty)).toFixed(3) : "";
 
-    const housingAmt = getVal(/Housing\s+AED\s+([\d.]+)/);
+    const housingAmtMatch = text.match(/Housing\s+AED\s+([\d,.]+)/i);
+    const housingAmt = housingAmtMatch ? housingAmtMatch[1].replace(/,/g, "") : "";
 
-    if (eleAmt) {
-      result.push({
-        title: "Electricity",
-        qr: `CLS:ELECTRICITY|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${eleAmt}|QTY:${eleQty}|PRI:${elePri}|DT:${dt}|NOTE:ELECTRICITY|ROOM:${room}`
-      });
-    }
+    if (eleAmt) result.push({ title: "Electricity", qr: `CLS:ELECTRICITY|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${eleAmt}|QTY:${eleQty}|PRI:${elePri}|DT:${dt}|NOTE:ELECTRICITY|ROOM:${room}` });
+    if (watAmt) result.push({ title: "Water", qr: `CLS:WATER|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${watAmt}|QTY:${watQty}|PRI:${watPri}|DT:${dt}|NOTE:WATER|ROOM:${room}` });
+    if (housingAmt) result.push({ title: "Housing Fee", qr: `CLS:HOUSING|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${housingAmt}|QTY:1|PRI:${housingAmt}|DT:${dt}|NOTE:HOUSING|ROOM:${room}` });
+    if (coolingAmt && empowerInvoice) result.push({ title: "District Cooling", qr: `CLS:COOLING|TIT:EM${empowerInvoice}|SD:${sd}|ED:${ed}|AMT:${coolingAmt}|QTY:${coolingQty}|PRI:${coolingPri}|DT:${dt}|NOTE:COOLING|ROOM:${room}` });
 
-    if (watAmt) {
-      result.push({
-        title: "Water",
-        qr: `CLS:WATER|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${watAmt}|QTY:${watQty}|PRI:${watPri}|DT:${dt}|NOTE:WATER|ROOM:${room}`
-      });
-    }
-
-    if (housingAmt) {
-      result.push({
-        title: "Housing Fee",
-        qr: `CLS:HOUSING|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${housingAmt}|QTY:1|PRI:${housingAmt}|DT:${dt}|NOTE:HOUSING|ROOM:${room}`
-      });
-    }
-
-    if (coolingAmt && empowerInvoice) {
-      result.push({
-        title: "District Cooling",
-        qr: `CLS:COOLING|TIT:EM${empowerInvoice}|SD:${sd}|ED:${ed}|AMT:${coolingAmt}|QTY:${coolingQty}|PRI:${coolingPri}|DT:${dt}|NOTE:COOLING|ROOM:${room}`
-      });
-    }
-
-    return { invoice, result };
+    return { invoice: invoice || inetInvoice, result };
   };
 
   for (const file of files) {
@@ -149,7 +164,7 @@ document.getElementById('pdfInput').addEventListener('change', async function (e
 
     const group = document.createElement("div");
     group.className = "invoice-group";
-    group.innerHTML = `<div class="invoice-title">Invoice: ${invoice} (${file.name})</div>`;
+    group.innerHTML = `<div class="invoice-title">Invoice: ${invoice || file.name}</div>`;
 
     if (result.length === 0) {
       group.innerHTML += `<p>⚠️ No valid charges found.</p>`;
