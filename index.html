@@ -98,31 +98,46 @@ document.getElementById('pdfInput').addEventListener('change', async function (e
     const result = [];
 
     const eleQty = text.match(/Electricity\s+(\d+)\s*Kilowatt/i)?.[1] || "125";
-    const elePri = text.match(/(\d+)\s*kWh\s+([\d.]+)\s+[\d.]+/i)?.[2] || "0.230";
-    const watQty = text.match(/Water\s+([\d.]+)\s*Cubic/i)?.[1] || "6.025";
-    const watPri = text.match(/([\d.]+)\s*m³\s+([\d.]+)\s+[\d.]+/i)?.[2] || "7.700";
-    const coolingMatch = text.match(/Consumption:\s*([\d.]+)\s*Ton.*?Rate:\s*([\d.]+)/i);
-    const coolingQty = coolingMatch?.[1] || "1";
-    const coolingPri = coolingMatch?.[2] || "";
-
     const eleAmt = getVal(/Electricity\s+AED\s+([\d.]+)/);
-    if (eleAmt) {
-      result.push({ title: "Electricity", qr: `CLS:ELECTRICITY|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${eleAmt}|QTY:${eleQty}|PRI:${elePri}|DT:${dt}|NOTE:ELECTRICITY|ROOM:${room}` });
-    }
+    const elePri = eleAmt && eleQty ? (parseFloat(eleAmt) / parseFloat(eleQty)).toFixed(3) : "0.230";
 
+    const watQty = text.match(/Water\s+([\d.]+)\s*Cubic/i)?.[1] || "6.025";
     const watAmt = getVal(/Water\s+AED\s+([\d.]+)/);
-    if (watAmt) {
-      result.push({ title: "Water", qr: `CLS:WATER|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${watAmt}|QTY:${watQty}|PRI:${watPri}|DT:${dt}|NOTE:WATER|ROOM:${room}` });
-    }
-
-    const housingAmt = getVal(/Housing\s+AED\s+([\d.]+)/);
-    if (housingAmt) {
-      result.push({ title: "Housing Fee", qr: `CLS:HOUSING|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${housingAmt}|QTY:1|PRI:${housingAmt}|DT:${dt}|NOTE:HOUSING|ROOM:${room}` });
-    }
+    const watPri = watAmt && watQty ? (parseFloat(watAmt) / parseFloat(watQty)).toFixed(3) : "7.700";
 
     const coolingAmt = getVal(/District Cooling\s+AED\s+([\d.]+)/);
+    const coolingMatch = text.match(/Consumption:\s*([\d.]+)\s*Ton.*?Rate:\s*([\d.]+)/i);
+    const coolingQty = coolingMatch?.[1] || "1";
+    const coolingPri = coolingAmt && coolingQty ? (parseFloat(coolingAmt) / parseFloat(coolingQty)).toFixed(3) : "";
+
+    const housingAmt = getVal(/Housing\s+AED\s+([\d.]+)/);
+
+    if (eleAmt) {
+      result.push({
+        title: "Electricity",
+        qr: `CLS:ELECTRICITY|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${eleAmt}|QTY:${eleQty}|PRI:${elePri}|DT:${dt}|NOTE:ELECTRICITY|ROOM:${room}`
+      });
+    }
+
+    if (watAmt) {
+      result.push({
+        title: "Water",
+        qr: `CLS:WATER|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${watAmt}|QTY:${watQty}|PRI:${watPri}|DT:${dt}|NOTE:WATER|ROOM:${room}`
+      });
+    }
+
+    if (housingAmt) {
+      result.push({
+        title: "Housing Fee",
+        qr: `CLS:HOUSING|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${housingAmt}|QTY:1|PRI:${housingAmt}|DT:${dt}|NOTE:HOUSING|ROOM:${room}`
+      });
+    }
+
     if (coolingAmt && empowerInvoice) {
-      result.push({ title: "District Cooling", qr: `CLS:COOLING|TIT:EM${empowerInvoice}|SD:${sd}|ED:${ed}|AMT:${coolingAmt}|QTY:${coolingQty}|PRI:${coolingPri}|DT:${dt}|NOTE:COOLING|ROOM:${room}` });
+      result.push({
+        title: "District Cooling",
+        qr: `CLS:COOLING|TIT:EM${empowerInvoice}|SD:${sd}|ED:${ed}|AMT:${coolingAmt}|QTY:${coolingQty}|PRI:${coolingPri}|DT:${dt}|NOTE:COOLING|ROOM:${room}`
+      });
     }
 
     return { invoice, result };
