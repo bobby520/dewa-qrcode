@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>DEWA QR Generator</title>
+  <title>DEWA + Empower QR Generator</title>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
   <style>
     body { font-family: Arial; background: #f5f5f5; padding: 20px; max-width: 1000px; margin: auto; }
     .header { text-align:center; padding: 20px; background: #fff; margin-bottom: 20px; border-radius: 12px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    .company-logo { height: 60px; margin-bottom: 10px; }
     .invoice-group { background: #fff; padding: 20px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 0 8px rgba(0,0,0,0.1); }
     .invoice-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
     .qr-card { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 8px; background: #fafafa; }
@@ -18,138 +19,155 @@
 <body>
 
 <div class="header">
-  <img src="https://bobby520.github.io/dewa-qrcode/company-logo.png" alt="Company Logo" style="height: 60px; margin-bottom: 10px;"><br>
-  <h2 style="margin: 0;">DEWA Invoice QR Code Generator</h2>
-  <p style="font-size: 14px; color: #666;">Auto extract fees, use Account Number to match Dorm ID (dropdown value)</p>
+  <img class="company-logo" src="https://bobby520.github.io/dewa-qrcode/company-logo.png" alt="Company Logo"><br>
+  <h2>DEWA / Empower Invoice QR Code Generator (v4)</h2>
+  <p>Upload PDF to auto generate structured QR</p>
 </div>
 
 <input type="file" id="pdfInput" accept=".pdf" multiple />
-
 <div id="output"></div>
 
 <script>
-  const accountToRoom = {
-    "2052303049": "81-05",
-    "2052303057": "81-07",
-    "2052303065": "81-08",
-    "2052303022": "81-17",
-    "2052303020": "81-20",
-    "2045749355": "82-06",
-    "2045749401": "82-18",
-    "2045749320": "83-03",
-    "2045749290": "83-10",
-    "2045749312": "83-12",
-    "2045749436": "85-06",
-    "2049450430": "93-05",
-    "2049726996": "93-17",
-    "2046428340": "MEADOWS VILLA",
-    "2054281085": "Banyan Tree",
-    "2017261645": "OFFICE-1901"
+document.getElementById('pdfInput').addEventListener('change', async function (e) {
+  const files = Array.from(e.target.files);
+  const output = document.getElementById("output");
+  output.innerHTML = "";
+
+  const readPdfText = async (file) => {
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument(new Uint8Array(buffer)).promise;
+    let text = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(item => item.str).join("\n") + "\n";
+    }
+    return text;
   };
 
-  document.getElementById('pdfInput').addEventListener('change', async function (e) {
-    const files = Array.from(e.target.files);
-    const output = document.getElementById("output");
-    output.innerHTML = "";
-
-    const readPdfText = async (file) => {
-      const buffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument(new Uint8Array(buffer)).promise;
-      let text = "";
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        text += content.items.map(item => item.str).join("\n") + "\n";
-      }
-      return text;
+  const extractFields = (text) => {
+    const getVal = (regex) => {
+      const m = text.match(regex);
+      return m ? m[1].trim() : "";
     };
 
-    const extractFields = (text) => {
-      const getVal = (regex) => {
-        const m = text.match(regex);
-        return m ? m[1].trim() : "";
-      };
-
-      const invoice = getVal(/Invoice:\s*(\d+)/);
-      const account = getVal(/Account Number:\s*(\d+)/);
-      const issueDate = getVal(/Issue Date:\s*(\d{2}\/\d{2}\/\d{4})/).replace(/\//g, "-");
-      const period = text.match(/Period:\s*(\d{2}\/\d{2}\/\d{4})\s*to\s*(\d{2}\/\d{2}\/\d{4})/);
-      const sd = period ? period[1].replace(/\//g, "") : "";
-      const ed = period ? period[2].replace(/\//g, "") : "";
-      const dt = issueDate.replace(/-/g, "");
-      const empowerInvoice = getVal(/EM(\d{9,})/);
-
-      let room = accountToRoom[account] || "UNKNOWN";
-
-      const result = [];
-
-      const eleAmt = getVal(/Electricity\s+AED\s+([\d.]+)/);
-      if (eleAmt) result.push({
-        title: "Electricity",
-        qr: `CLS:ELECTRICITY|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${eleAmt}|QTY:125|PRI:0.230|DT:${dt}|NOTE:ELECTRICITY|ROOM:${room}`
-      });
-
-      const watAmt = getVal(/Water\s+AED\s+([\d.]+)/);
-      if (watAmt) result.push({
-        title: "Water",
-        qr: `CLS:WATER|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${watAmt}|QTY:6.025|PRI:7.700|DT:${dt}|NOTE:WATER|ROOM:${room}`
-      });
-
-      const housingAmt = getVal(/Housing\s+AED\s+([\d.]+)/);
-      if (housingAmt) result.push({
-        title: "Housing Fee",
-        qr: `CLS:HOUSING|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${housingAmt}|QTY:1|PRI:${housingAmt}|DT:${dt}|NOTE:HOUSING|ROOM:${room}`
-      });
-
-      const coolingAmt = getVal(/District Cooling\s+AED\s+([\d.]+)/);
-      if (coolingAmt && empowerInvoice) result.push({
-        title: "District Cooling",
-        qr: `CLS:COOLING|TIT:EM${empowerInvoice}|SD:${sd}|ED:${ed}|AMT:${coolingAmt}|QTY:1|PRI:${coolingAmt}|DT:${dt}|NOTE:COOLING|ROOM:${room}`
-      });
-
-      return { invoice, result };
+    const formatDateToYMD = (d) => {
+      const parts = d.split("/");
+      return parts.length === 3 ? parts[2] + parts[1] + parts[0] : "";
     };
 
-    for (const file of files) {
-      const text = await readPdfText(file);
-      const { invoice, result } = extractFields(text);
+    const invoice = getVal(/Invoice:\s*(\d+)/);
+    const accountMatch = text.match(/\b(205|204|201)\d{7}\b/);
+    const account = accountMatch ? accountMatch[0].trim() : "";
 
-      const group = document.createElement("div");
-      group.className = "invoice-group";
-      group.innerHTML = `<div class="invoice-title">Invoice: ${invoice} (${file.name})</div>`;
+    const issueDateRaw = getVal(/Issue Date:\s*(\d{2}\/\d{2}\/\d{4})/);
+    const today = new Date();
+    const todayStr = today.getFullYear().toString() +
+                    String(today.getMonth() + 1).padStart(2, '0') +
+                    String(today.getDate()).padStart(2, '0');
+    const dt = formatDateToYMD(issueDateRaw) || todayStr;
 
-      if (result.length === 0) {
-        group.innerHTML += `<p>⚠️ No valid charges found.</p>`;
-      }
+    const period = text.match(/Period:\s*(\d{2}\/\d{2}\/\d{4})\s*to\s*(\d{2}\/\d{2}\/\d{4})/);
+    const sd = period ? formatDateToYMD(period[1]) : "";
+    const ed = period ? formatDateToYMD(period[2]) : "";
 
-      result.forEach((item, idx) => {
-        const card = document.createElement("div");
-        card.className = "qr-card";
+    const empowerInvoice = getVal(/EM(\d{9,})/);
 
-        const qrBox = document.createElement("div");
-        qrBox.id = `qr_${invoice}_${idx}`;
-        qrBox.className = "qr-block";
+    const roomMap = {
+      "2052303049": "Bldg 81 - 05",
+      "2052303057": "Bldg 81 - 07",
+      "2052303065": "Bldg 81 - 08",
+      "2052303022": "Bldg 81 - 17",
+      "2052303020": "Bldg 81 - 20",
+      "2052303030": "Bldg 81 - 20",
+      "2045749355": "Bldg 82 - 06",
+      "2045749401": "Bldg 82 - 18",
+      "2045749320": "Bldg 83 - 03",
+      "2045749290": "Bldg 83 - 10",
+      "2045749312": "Bldg 83 - 12",
+      "2045749436": "Bldg 85 - 06",
+      "2049404530": "Bldg 93 - 05",
+      "2049726996": "Bldg 93 - 17",
+      "2046428340": "MEADOWS VILLA",
+      "2054281085": "Banyan Tree",
+      "2017261645": "OFFICE-1901"
+    };
 
-        const summary = document.createElement("div");
-        summary.className = "summary";
-        summary.innerHTML = `<b>${item.title}</b><br>${item.qr.replace(/\|/g, "<br>")}`;
+    const room = roomMap[account] || "UNKNOWN";
 
-        card.appendChild(qrBox);
-        card.appendChild(summary);
-        group.appendChild(card);
+    const result = [];
 
-        setTimeout(() => {
-          new QRCode(qrBox, {
-            text: item.qr,
-            width: 180,
-            height: 180
-          });
-        }, 10);
-      });
+    const eleQty = text.match(/Electricity\s+(\d+)\s*Kilowatt/i)?.[1] || "125";
+    const elePri = text.match(/(\d+)\s*kWh\s+([\d.]+)\s+[\d.]+/i)?.[2] || "0.230";
+    const watQty = text.match(/Water\s+([\d.]+)\s*Cubic/i)?.[1] || "6.025";
+    const watPri = text.match(/([\d.]+)\s*m³\s+([\d.]+)\s+[\d.]+/i)?.[2] || "7.700";
+    const coolingMatch = text.match(/Consumption:\s*([\d.]+)\s*Ton.*?Rate:\s*([\d.]+)/i);
+    const coolingQty = coolingMatch?.[1] || "1";
+    const coolingPri = coolingMatch?.[2] || "";
 
-      document.getElementById("output").appendChild(group);
+    const eleAmt = getVal(/Electricity\s+AED\s+([\d.]+)/);
+    if (eleAmt) {
+      result.push({ title: "Electricity", qr: `CLS:ELECTRICITY|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${eleAmt}|QTY:${eleQty}|PRI:${elePri}|DT:${dt}|NOTE:ELECTRICITY|ROOM:${room}` });
     }
-  });
+
+    const watAmt = getVal(/Water\s+AED\s+([\d.]+)/);
+    if (watAmt) {
+      result.push({ title: "Water", qr: `CLS:WATER|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${watAmt}|QTY:${watQty}|PRI:${watPri}|DT:${dt}|NOTE:WATER|ROOM:${room}` });
+    }
+
+    const housingAmt = getVal(/Housing\s+AED\s+([\d.]+)/);
+    if (housingAmt) {
+      result.push({ title: "Housing Fee", qr: `CLS:HOUSING|TIT:${invoice}|SD:${sd}|ED:${ed}|AMT:${housingAmt}|QTY:1|PRI:${housingAmt}|DT:${dt}|NOTE:HOUSING|ROOM:${room}` });
+    }
+
+    const coolingAmt = getVal(/District Cooling\s+AED\s+([\d.]+)/);
+    if (coolingAmt && empowerInvoice) {
+      result.push({ title: "District Cooling", qr: `CLS:COOLING|TIT:EM${empowerInvoice}|SD:${sd}|ED:${ed}|AMT:${coolingAmt}|QTY:${coolingQty}|PRI:${coolingPri}|DT:${dt}|NOTE:COOLING|ROOM:${room}` });
+    }
+
+    return { invoice, result };
+  };
+
+  for (const file of files) {
+    const text = await readPdfText(file);
+    const { invoice, result } = extractFields(text);
+
+    const group = document.createElement("div");
+    group.className = "invoice-group";
+    group.innerHTML = `<div class="invoice-title">Invoice: ${invoice} (${file.name})</div>`;
+
+    if (result.length === 0) {
+      group.innerHTML += `<p>⚠️ No valid charges found.</p>`;
+    }
+
+    result.forEach((item, idx) => {
+      const card = document.createElement("div");
+      card.className = "qr-card";
+
+      const qrBox = document.createElement("div");
+      qrBox.id = `qr_${invoice}_${idx}`;
+      qrBox.className = "qr-block";
+
+      const summary = document.createElement("div");
+      summary.className = "summary";
+      summary.innerHTML = `<b>${item.title}</b><br>${item.qr.replace(/\|/g, "<br>")}`;
+
+      card.appendChild(qrBox);
+      card.appendChild(summary);
+      group.appendChild(card);
+
+      setTimeout(() => {
+        new QRCode(qrBox, {
+          text: item.qr,
+          width: 180,
+          height: 180
+        });
+      }, 10);
+    });
+
+    document.getElementById("output").appendChild(group);
+  }
+});
 </script>
 
 </body>
